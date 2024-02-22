@@ -13,15 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.semanticweb.owlapi.model.IRI;
-import org.semanticweb.owlapi.model.OWLAnnotationAssertionAxiom;
-import org.semanticweb.owlapi.model.OWLAnnotationProperty;
-import org.semanticweb.owlapi.model.OWLAxiom;
-import org.semanticweb.owlapi.model.OWLClass;
-import org.semanticweb.owlapi.model.OWLEntity;
-import org.semanticweb.owlapi.model.OWLLiteral;
-import org.semanticweb.owlapi.model.OWLObjectProperty;
-import org.semanticweb.owlapi.model.OWLOntology;
+import de.tu_dresden.inf.lat.prettyPrinting.formatting.*;
+import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.vocab.SKOSVocabulary;
 
 import de.tu_dresden.inf.lat.evee.proofs.evaluation.rule_extraction.OWLAxiomReplacer;
@@ -29,7 +22,6 @@ import de.tu_dresden.inf.lat.evee.proofs.evaluation.rule_extraction.OWLObjectMap
 import de.tu_dresden.inf.lat.evee.proofs.interfaces.IInference;
 import de.tu_dresden.inf.lat.evee.proofs.interfaces.IProof;
 import de.tu_dresden.inf.lat.evee.general.tools.OWLTools;
-import de.tu_dresden.inf.lat.prettyPrinting.formatting.SimpleOWLFormatterLongNames;
 import guru.nidi.graphviz.attribute.Color;
 import guru.nidi.graphviz.attribute.Label;
 import guru.nidi.graphviz.attribute.Shape;
@@ -84,7 +76,7 @@ public class ImageGenerator {
 		Utils.loadProofAndThen(input, proof -> {
 			String filename = input.getFileName().toString();
 			String output = input.resolveSibling(filename.substring(0, filename.length() - 5)) + ".png";
-			new ImageGenerator().drawProof(proof, output);
+			new ImageGenerator().drawProof(proof, output, false);
 		});
 	}
 
@@ -93,10 +85,26 @@ public class ImageGenerator {
 	private final Set<OWLAxiom> processedNodes = new HashSet<>();
 	private final Map<OWLAxiom, MutableNode> nodeMap = new HashMap<>();
 
-	private void drawProof(IProof<OWLAxiom> proof, String filename) {
+	public void setOntology(OWLOntology ontology) {
+		ONTOLOGY = ontology;
+	}
+
+	public void setSignature(List<String> signature) {
+		SIGNATURE = signature;
+	}
+
+	public void drawTrees(boolean drawTrees) {
+		TREES = drawTrees;
+	}
+
+	public void drawProof(IProof<OWLAxiom> proof, String filename, boolean simplifiedNames) {
 		MutableGraph graph = Factory.mutGraph(filename).setDirected(true);
 
-		fillGraph(graph, proof.getFinalConclusion(), proof);
+		SimpleOWLFormatterCl formatter = simplifiedNames ? SimpleOWLFormatter$.MODULE$ : SimpleOWLFormatterLongNames$.MODULE$;
+		if (ONTOLOGY != null) {
+			formatter.setReferenceOntology(ONTOLOGY);
+		}
+		fillGraph(graph, proof.getFinalConclusion(), proof, formatter);
 
 		try {
 			Graphviz.fromGraph(graph).render(Format.PNG).toFile(new File(filename));
@@ -107,7 +115,7 @@ public class ImageGenerator {
 		}
 	}
 
-	private MutableNode fillGraph(MutableGraph graph, OWLAxiom conclusion, IProof<OWLAxiom> proof) {
+	private MutableNode fillGraph(MutableGraph graph, OWLAxiom conclusion, IProof<OWLAxiom> proof, Formatter<OWLObject> formatter) {
 
 		if (!TREES) {
 			// reuse already created nodes
@@ -117,7 +125,7 @@ public class ImageGenerator {
 		}
 
 		MutableNode conclusionNode = Factory.mutNode(String.valueOf(id++))
-				.add(Label.of(SimpleOWLFormatterLongNames.format(marked(conclusion))));
+				.add(Label.of(formatter.format(marked(conclusion))));
 
 		if (!TREES) {
 			// store node for later use
@@ -132,7 +140,7 @@ public class ImageGenerator {
 			graph.add(hyperConnection.addLink(to(conclusionNode)));
 
 			for (OWLAxiom prem : inf.getPremises()) {
-				MutableNode premiseNode = fillGraph(graph, prem, proof);
+				MutableNode premiseNode = fillGraph(graph, prem, proof, formatter);
 				graph.add(premiseNode.addLink(hyperConnection));
 			}
 		}
